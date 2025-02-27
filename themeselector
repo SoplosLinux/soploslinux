@@ -1,0 +1,125 @@
+#!/bin/bash
+
+# Guardar configuración del panel antes de aplicar un tema
+mkdir -p ~/xfce-panel-backup
+cp -r ~/.config/xfce4/panel ~/xfce-panel-backup/
+cp ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml ~/xfce-panel-backup/
+echo "Configuración del panel guardada en ~/xfce-panel-backup/"
+
+# Directorio donde están los temas guardados
+THEMES_DIR="$HOME/.themes-backup"
+
+# Verificar si el directorio existe
+if [[ ! -d "$THEMES_DIR" ]]; then
+    yad --info --text="El directorio de temas no existe." --title="Error"
+    exit 1
+fi
+
+# Crear un archivo temporal para la lista de temas con imágenes
+temp_list=$(mktemp)
+
+# Generar la lista de temas con sus respectivas imágenes de vista previa
+for tema in "$THEMES_DIR"/*; do
+    if [ -d "$tema" ]; then
+        nombre_tema=$(basename "$tema")
+        thumbnail_path="$tema/view/thumbnail.png"
+        
+        # Si existe la miniatura, añadirla a la lista
+        if [ -f "$thumbnail_path" ]; then
+            echo -e "$thumbnail_path\n$nombre_tema" >> "$temp_list"
+        else
+            # Si no hay vista previa, usar un icono por defecto
+            echo -e "dialog-question\n$nombre_tema" >> "$temp_list"
+        fi
+    fi
+done
+
+# Verificar si hay temas guardados
+if [ ! -s "$temp_list" ]; then
+    yad --info --text="No hay temas guardados." --title="Error"
+    rm "$temp_list"
+    exit 1
+fi
+
+# Mostrar la lista con yad y capturar la selección
+tema_seleccionado=$(yad --list \
+    --title="Selecciona un tema" \
+    --width=400 \
+    --height=400 \
+    --column="":IMG \
+    --column="Nombre del tema" \
+    --button="Seleccionar":0 \
+    --button="Cancelar":1 \
+    --print-column=2 \
+    --window-icon="/usr/share/branding-soplos/plymouth-logo.png" \
+    --no-headers \
+    $(cat "$temp_list"))
+
+# Limpiar archivo temporal
+rm "$temp_list"
+
+# Verificar si el usuario canceló la selección
+if [[ -z "$tema_seleccionado" ]]; then
+    exit 1
+fi
+
+# Eliminar el carácter de tubería final si existe
+tema_seleccionado=${tema_seleccionado%|}
+
+# Verificar que el tema seleccionado exista
+if [[ ! -d "$THEMES_DIR/$tema_seleccionado" ]]; then
+    yad --info --text="Error: No se encontró el tema seleccionado: $tema_seleccionado" --title="Error"
+    exit 1
+fi
+
+# Mostrar vista previa antes de aplicar
+if [ -f "$THEMES_DIR/$tema_seleccionado/view/preview.png" ]; then
+    yad --image="$THEMES_DIR/$tema_seleccionado/view/preview.png" \
+        --title="Vista previa del tema $tema_seleccionado" \
+        --button="Aplicar":0 \
+        --button="Cancelar":1 \
+        --width=640 \
+        --height=360 \
+        --center
+
+    if [ $? -eq 1 ]; then
+        exit 0
+    fi
+fi
+
+# Aplicar el tema si hay configuración guardada
+if [[ -f "$THEMES_DIR/$tema_seleccionado/tema.conf" ]]; then
+    xfconf-query -c xsettings -p /Net/ThemeName -s "$(grep '/Net/ThemeName' "$THEMES_DIR/$tema_seleccionado/tema.conf" | awk '{print $2}')"
+    xfconf-query -c xsettings -p /Net/IconThemeName -s "$(grep '/Net/IconThemeName' "$THEMES_DIR/$tema_seleccionado/tema.conf" | awk '{print $2}')"
+    xfconf-query -c xsettings -p /Gtk/CursorThemeName -s "$(grep '/Gtk/CursorThemeName' "$THEMES_DIR/$tema_seleccionado/tema.conf" | awk '{print $2}')"
+fi
+
+# Aplicar el tema de XFWM4 si existe configuración guardada
+if [[ -f "$THEMES_DIR/$tema_seleccionado/xfwm.conf" ]]; then
+    xfconf-query -c xfwm4 -p /general/theme -s "$(grep '/general/theme' "$THEMES_DIR/$tema_seleccionado/xfwm.conf" | awk '{print $2}')"
+fi
+
+# Restaurar paneles si existe configuración guardada
+if [[ -f "$THEMES_DIR/$tema_seleccionado/xfce4-panel.xml" ]]; then
+    cp "$THEMES_DIR/$tema_seleccionado/xfce4-panel.xml" "$HOME/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml"
+    
+    # Asegurar que XFCE toma la nueva configuración
+    xfce4-panel --quit
+    sleep 2  # Espera para asegurarse de que XFCE libera el proceso
+    pkill xfconfd  # Mata el demonio de configuración de XFCE
+    rm -rf "$HOME/.config/xfce4/panel"  # Limpia configuración anterior del panel
+    cp -r "$THEMES_DIR/$tema_seleccionado/panel" "$HOME/.config/xfce4/"  # Restaura el panel
+    xfce4-panel & disown  # Reinicia XFCE Panel en segundo plano
+fi
+
+yad --info --text="El tema '$tema_seleccionado' ha sido aplicado con éxito." --title="Tema Aplicado"
+
+# Restaurar configuración del panel después de aplicar el tema
+if [ -d ~/xfce-panel-backup ]; then
+    cp -r ~/xfce-panel-backup/panel ~/.config/xfce4/
+    cp ~/xfce-panel-backup/xfce4-panel.xml ~/.config/xfce4/xfconf/xfce-perchannel-xml/
+    xfce4-panel --restart
+    echo "Configuración restaurada y panel reiniciado."
+else
+    echo "No hay copia de seguridad disponible."
+fi
