@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Obtener el nombre del tema sin abrir terminal
+nombre=$(yad --entry --title="Guardar Tema" --text="Ingrese el nombre del tema:" --entry-text="NuevoTema" --center --window-icon="/usr/share/branding-soplos/plymouth-logo.png")
+
+# Si el usuario cancela, salir del script
+if [[ -z "$nombre" ]]; then
+    exit 1
+fi
+
+# Definir la ruta del tema
+THEME_DIR="$HOME/.themes-backup/$nombre"
+
+# Crear la carpeta del tema y la subcarpeta de vista previa
+mkdir -p "$THEME_DIR/view"
+
+# Guardar configuraciones de XFCE
+xfconf-query -c xsettings -lv > "$THEME_DIR/tema.conf"
+xfconf-query -c xfce4-panel -lv > "$THEME_DIR/panel.conf"
+xfconf-query -c xfwm4 -lv > "$THEME_DIR/xfwm.conf"
+xfconf-query -c xfce4-desktop -lv > "$THEME_DIR/fondo.conf"
+xfconf-query -c xfce4-keyboard-shortcuts -lv > "$THEME_DIR/atajos.conf"
+
+# Copiar configuraciones del panel
+cp -r "$HOME/.config/xfce4/panel" "$THEME_DIR/"
+cp "$HOME/.config/xfce4/xfconf/xfce4-panel.xml" "$THEME_DIR/"
+
+# **Mostrar notificación y esperar a que desaparezca**
+notify-send -t 1500 "Captura de Tema" "Se tomará una captura de pantalla..."
+sleep 2  # Esperamos a que la notificación desaparezca
+
+# **Minimizar todas las ventanas**
+wmctrl -k on
+sleep 1  # Esperar a que se minimicen las ventanas
+
+# **Tomar captura de pantalla sin esperar demasiado**
+scrot -d 2 "$THEME_DIR/view/preview_full.png"
+
+# Crear versiones reducidas
+convert "$THEME_DIR/view/preview_full.png" -resize 640x360 "$THEME_DIR/view/preview.png"
+convert "$THEME_DIR/view/preview_full.png" -resize 160x90 "$THEME_DIR/view/thumbnail.png"
+
+# Restaurar ventanas después de la captura
+wmctrl -k off
+
+# Mostrar mensaje con vista previa sin dejar la terminal abierta
+yad --image="$THEME_DIR/view/preview.png" \
+    --title="Tema Guardado" \
+    --text="El tema '$nombre' ha sido guardado correctamente." \
+    --button="Aceptar":0 --center & disown
+
+exit 0
