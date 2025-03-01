@@ -44,15 +44,22 @@ def find_icon_in_system(icon_name):
 
     # Búsqueda manual en ubicaciones comunes
     search_paths = [
-        '/usr/share/icons/hicolor/48x48/apps',
-        '/usr/share/icons/hicolor/scalable/apps',
-        '/usr/share/pixmaps',
-        '/usr/share/icons/gnome/48x48/apps',
-        '/usr/share/icons/Adwaita/48x48/apps',
-        '/usr/share/app-install/icons',
-        os.path.expanduser('~/.local/share/icons'),
-        '/usr/local/share/icons'
-    ]
+    '/usr/share/icons/hicolor/48x48/apps',
+    '/usr/share/icons/hicolor/scalable/apps',
+    '/usr/share/pixmaps',
+    '/usr/share/icons/gnome/48x48/apps',
+    '/usr/share/icons/Adwaita/48x48/apps',
+    '/usr/share/app-install/icons',
+    os.path.expanduser('~/.local/share/icons'),
+    '/usr/local/share/icons',
+    # Rutas de iconos de Flatpak
+    '/var/lib/flatpak/exports/share/icons',
+    os.path.expanduser('~/.local/share/flatpak/exports/share/icons'),
+    '/var/lib/flatpak/exports/share/icons/hicolor/48x48/apps',
+    '/var/lib/flatpak/exports/share/icons/hicolor/scalable/apps',
+    os.path.expanduser('~/.local/share/flatpak/exports/share/icons/hicolor/48x48/apps'),
+    os.path.expanduser('~/.local/share/flatpak/exports/share/icons/hicolor/scalable/apps')
+]
 
     # Extensiones comunes de iconos
     extensions = ['', '.png', '.svg', '.xpm']
@@ -511,6 +518,17 @@ class AppSelectorDialog(Gtk.Dialog):
             for filename in os.listdir(local_app_dir):
                 if filename.endswith(".desktop"):
                     desktop_files.append(os.path.join(local_app_dir, filename))
+
+        # Buscar en directorios de Flatpak
+        flatpak_app_dirs = [
+        '/var/lib/flatpak/exports/share/applications',
+        os.path.expanduser('~/.local/share/flatpak/exports/share/applications')
+]
+        for flatpak_dir in flatpak_app_dirs:
+            if os.path.exists(flatpak_dir):
+                for filename in os.listdir(flatpak_dir):
+                    if filename.endswith(".desktop"):
+                        desktop_files.append(os.path.join(flatpak_dir, filename))                    
         
         # Contador de aplicaciones cargadas
         loaded_count = 0
